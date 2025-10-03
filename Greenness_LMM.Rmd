@@ -1,0 +1,192 @@
+---
+title: "Greenness_LMM"
+output:
+  html_document:
+    df_print: paged
+---
+
+This is a R notebook to analyze the ratings of architectural images using linear mixed models.
+
+
+# Data preparation
+
+```{r load libraries, include=FALSE}
+library(tidyverse)
+# load the libraries for LMM
+library(lme4)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+
+```{r preprocess, include=FALSE}
+# Read the two CSV files
+# Set show_col_types = FALSE to keep console clean.
+df_exp1   <- readr::read_csv("Data_exp1.csv",  show_col_types = FALSE)
+df_imginf <- readr::read_csv("Image_info.csv", show_col_types = FALSE)
+
+
+# Merge (left join keeps all trials from Data_exp1) ---
+# Only bring in the columns needed from Image_info.
+df <- df_exp1 %>%
+  left_join(df_imginf %>% select(ImageNumber, Greenness), by = "ImageNumber")
+
+# Transform Greenness and set Plus as the reference level in Category
+df$Greenness_z <- as.numeric(scale(df$Greenness, center = TRUE, scale = TRUE))
+df$Category <- relevel(factor(df$Category), ref = "Plus")
+```
+
+# Modelling
+## Find the best model
+
+```{r best model, echo=TRUE, warning=FALSE}
+# find the best model
+source("select_lmm.R")
+best_model <- select_lmm(
+  data       = df,
+  dv         = "mean_rating",
+  fixed_main = c("Category", "Greenness_z"),
+  group_subj = "Participant",
+  group_item = "ImageNumber",
+  verbose    = TRUE
+)
+
+```
+## Check the output
+
+```{r model output}
+# check the result of best model
+summary(best_model)
+Anova(best_model, type = 'III')
+# Save the model object to a file
+saveRDS(best_model, file = "best_model.rds")
+```
+
+## Diagnosis
+
+```{r}
+isSingular(best_model, tol = 1e-4)
+
+# Compute the maximum absolute gradient at convergence
+oi <- best_model@optinfo
+maxgrad <- tryCatch(max(abs(oi$derivs$gradient)), error=function(e) NA)
+maxgrad
+
+```
+
+FALSE means the model is not overfitted (no zero variance components, correlation matrix is valid).
+A small value of maximum absolute gradient (e.g., < 0.002) indicates good numerical convergence
+
+# Interpretation
+## Effect of Category
+### Post hoc
+
+```{r post hoc, echo=FALSE, message=FALSE, warning=FALSE}
+# Estimated marginal means at Greenness_z = 0
+emm <- emmeans(best_model, ~ Category, at = list(Greenness_z = 0))
+
+# Pairwise comparisons with Tukey adjustment
+pairwise_results <- pairs(emm, adjust = "tukey") %>%
+  as.data.frame() %>%
+  select(contrast, estimate, SE, df, z.ratio, p.value)
+
+# Clean column names
+pairwise_results <- pairwise_results %>%
+  rename(
+    Comparison = contrast,
+    Difference = estimate,
+    Std_Error  = SE,
+    DF         = df,
+    z_value    = z.ratio,
+    P_value    = p.value
+  )
+
+# Round for nicer output
+pairwise_results <- pairwise_results %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+pairwise_results
+
+```
+
+### Plot
+
+```{r category plot, echo=FALSE}
+emm_df <- as.data.frame(emm)
+order = c("Plus", "Biophilic", "Ceiling", "Lighting", "Combined")
+ggplot(emm_df, aes(x = factor(Category, levels=order), y = emmean, fill = Category)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
+  labs(
+    title = "Effect of Category (Greenness_z = 0)",
+    x = "Category",
+    y = "Rating"
+  ) +
+  theme_minimal()
+```
+
+Pairwise comparisons (Tukey-adjusted) at Greenness_z = 0 showed the following pattern:
+
+Plus images received significantly higher ratings than Ceiling and Combined,
+but did not differ significantly from Biophilic or Lighting.
+
+Combined images were rated significantly lower than Plus, Biophilic, and Ceiling,
+but did not differ significantly from Lighting.
+
+Ceiling, Biophilic, and Lighting conditions did not differ significantly from one another.
+
+Lighting showed the greatest uncertainty (large SE), and was not significantly different from any other category.
+
+In summary, while the numerical order of means resembled the ANOVA pattern (Plus > Ceiling > Biophilic > Lighting > Combined), the LMM results indicate that **Ceiling, Biophilic, and Lighting cannot be reliably distinguished from each other**. Only Plus (higher) and Combined (lower) stand out as statistically distinct groups.
+
+## Effect of greenness
+### Slopes
+
+```{r slopes, echo=FALSE, message=FALSE, warning=FALSE}
+# Extract the slope of Greenness_z within each Category
+trend_res <- emtrends(best_model, ~ Category, var = "Greenness_z")
+
+trend_df <- as.data.frame(trend_res) %>%
+  rename(
+    Category = Category,
+    Slope = Greenness_z.trend,   # Estimated slope for Greenness_z
+    Std_Error = SE,              # Standard error of the slope
+    DF = df,
+    CI_lower = asymp.LCL,        # Lower bound of 95% CI
+    CI_upper = asymp.UCL         # Upper bound of 95% CI
+  ) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+trend_df
+
+
+```
+
+### Plot
+```{r Slope plot, echo=FALSE}
+ggplot(trend_df, aes(x = factor(Category, levels=order), y = Slope)) +
+  geom_point(size = 3, color = "darkgreen") +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width = 0.2, color = "darkgreen") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(
+    title = "Effect of Greenness within each Category",
+    x = "Category",
+    y = "Slope of Greenness (change in rating per 1 SD)"
+  ) +
+  theme_minimal()
+```
+
+
+
+These results suggest that greenness does not exert a uniform influence across categories:
+
+In some conditions (e.g., Combined, possibly Biophilic), greenness acts as a meaningful predictor of higher ratings.
+
+In others (e.g., Ceiling, Lighting), the effect of greenness is weak or too uncertain to be conclusive.
+
+Overall, this pattern supports the idea that the impact of greenness on perceived hominess is context-dependent, rather than consistent across all image types.
+
+
+
+
