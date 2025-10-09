@@ -3,6 +3,7 @@ title: "Greenness_LMM"
 output:
   html_document:
     df_print: paged
+  pdf_document: default
 ---
 
 This is a R notebook to analyze the ratings of architectural images using linear mixed models.
@@ -34,7 +35,7 @@ df <- df_exp1 %>%
 
 # Transform Greenness and set Plus as the reference level in Category
 df$Greenness_z <- as.numeric(scale(df$Greenness, center = TRUE, scale = TRUE))
-df$Category <- relevel(factor(df$Category), ref = "Plus")
+df$Category <- relevel(factor(df$Category), ref = "Combined+")
 ```
 
 # Modelling
@@ -63,6 +64,10 @@ Anova(best_model, type = 'III')
 saveRDS(best_model, file = "best_model.rds")
 ```
 
+The analysis showed a significant main effect of Category, indicating that mean ratings differed across categories.
+In addition, the interaction between Category and Greenness was significant, suggesting that the influence of greenness on ratings varied across categories.
+The main effect of Greenness was marginally significant (p = .071), indicating a weak overall trend toward higher ratings with increasing greenness.
+
 ## Diagnosis
 
 ```{r}
@@ -74,9 +79,10 @@ maxgrad <- tryCatch(max(abs(oi$derivs$gradient)), error=function(e) NA)
 maxgrad
 
 ```
-
-FALSE means the model is not overfitted (no zero variance components, correlation matrix is valid).
-A small value of maximum absolute gradient (e.g., < 0.002) indicates good numerical convergence
+Although the model summary returned a convergence warning (“unable to evaluate scaled gradient; model failed to converge: degenerate Hessian with 1 negative eigenvalue”), we conducted additional diagnostic checks to assess model stability.
+The singularity test returned FALSE, indicating that no random-effect variance component was estimated as zero and the model is not overfitted.
+Furthermore, the maximum absolute gradient at convergence was very small (max|grad| = 0.0005), well below the recommended threshold of 0.002, suggesting satisfactory numerical convergence.
+Taken together, these diagnostics confirm that the model is stable and the results can be interpreted with confidence.
 
 # Interpretation
 ## Effect of Category
@@ -110,38 +116,74 @@ pairwise_results
 
 ```
 
+Pairwise comparisons of model-adjusted ratings at the mean level of greenness **(Greenness_z = 0)** were conducted using Tukey-adjusted contrasts.
+These comparisons revealed how mean ratings differed across categories after **accounting for greenness**.
+
+Pairwise Tukey-adjusted comparisons revealed that **Combined+** images were rated significantly higher than **Ceiling-** (z = 4.72, p < .001) and **Combined-** (z = 12.77, p < .001) images.
+The difference between **Combined+** and **Biophilic-** images did not reach significance (z = 2.37, p = .125), and **Combined+** did not differ from **Lighting-** (p = .961).
+Among the categories removing one dimension, Ceiling-, Biophilic-, and Lighting- did not differ significantly from each other (all p > .9), but each was rated higher than **Combined-++ (all p < .001).
+
+Overall, this pattern indicates that **Combined+** images received the highest ratings, **Combined-** the lowest, and the remaining categories did not differ reliably from each other.
+
 ### Plot
 
-```{r category plot, echo=FALSE}
-emm_df <- as.data.frame(emm)
-order = c("Plus", "Biophilic", "Ceiling", "Lighting", "Combined")
-ggplot(emm_df, aes(x = factor(Category, levels=order), y = emmean, fill = Category)) +
-  geom_col() +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL), width = 0.2) +
+```{r Mutiple greenness, echo=FALSE}
+
+# Compute model-predicted means at different greenness levels
+emm_multi <- emmeans(best_model,
+                     ~ Category * Greenness_z,
+                     at = list(Greenness_z = c(-2, -1, 0, 1, 2)))
+
+emm_df <- as.data.frame(emm_multi)
+order = c("Combined+", "Biophilic-", "Ceiling-", "Lighting-", "Combined-")
+ggplot(emm_df,
+       aes(x = factor(Greenness_z),
+           y = emmean,
+           fill = factor(Category, levels = order))) +
+  geom_col(position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL),
+                position = position_dodge(width = 0.8),
+                width = 0.2) +
+  scale_fill_brewer(palette = "RdYlGn",
+                    name = "Category",
+                    labels = order) +
   labs(
-    title = "Effect of Category (Greenness_z = 0)",
-    x = "Category",
-    y = "Rating"
+    title = "Model-Predicted Ratings Across Categories and Greenness Levels",
+    x = "Greenness (z-scored)",
+    y = "Predicted Rating"
   ) +
-  theme_minimal()
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "top",
+    legend.title = element_text(face = "bold")
+  )
 ```
 
-Pairwise comparisons (Tukey-adjusted) at Greenness_z = 0 showed the following pattern:
+The bar plot presents model-predicted mean ratings at five standardized greenness levels (Greenness_z = −2, −1, 0, +1, +2).
+Within each greenness level, bars of different colors represent the predicted ratings for each Category, and the error bars indicate 95% confidence intervals.
+This visualization allows direct comparison of how different categories were rated under the same greenness condition.
 
-Plus images received significantly higher ratings than Ceiling and Combined,
-but did not differ significantly from Biophilic or Lighting.
+```{r Emmip plot, echo=FALSE}
+emmip(best_model, Category ~ Greenness_z,
+      at = list(Greenness_z = seq(-2, 2, by = 0.5)),
+      CIs = TRUE) +
+  labs(
+    title = "Interaction between Category and Greenness",
+    x = "Greenness (z-scored)",
+    y = "Predicted Rating"
+  ) +
+  theme_minimal()
 
-Combined images were rated significantly lower than Plus, Biophilic, and Ceiling,
-but did not differ significantly from Lighting.
+```
 
-Ceiling, Biophilic, and Lighting conditions did not differ significantly from one another.
-
-Lighting showed the greatest uncertainty (large SE), and was not significantly different from any other category.
-
-In summary, while the numerical order of means resembled the ANOVA pattern (Plus > Ceiling > Biophilic > Lighting > Combined), the LMM results indicate that **Ceiling, Biophilic, and Lighting cannot be reliably distinguished from each other**. Only Plus (higher) and Combined (lower) stand out as statistically distinct groups.
+Basically the same content as the previous figure.
 
 ## Effect of greenness
 ### Slopes
+
+To further examine how greenness influenced ratings within each category, we estimated the simple slopes of Greenness_z for every Category.
+This analysis provides the rate of change in predicted rating as greenness increases, separately for each category.
+The resulting table lists the estimated slopes, standard errors, and 95% confidence intervals, allowing comparison of the strength and direction of greenness effects across categories.
 
 ```{r slopes, echo=FALSE, message=FALSE, warning=FALSE}
 # Extract the slope of Greenness_z within each Category
@@ -159,7 +201,6 @@ trend_df <- as.data.frame(trend_res) %>%
   mutate(across(where(is.numeric), ~ round(.x, 3)))
 
 trend_df
-
 
 ```
 
@@ -181,11 +222,13 @@ ggplot(trend_df, aes(x = factor(Category, levels=order), y = Slope)) +
 
 These results suggest that greenness does not exert a uniform influence across categories:
 
-In some conditions (e.g., Combined, possibly Biophilic), greenness acts as a meaningful predictor of higher ratings.
+In some conditions (e.g., Combined-, possibly Biophilic-), greenness acts as a meaningful predictor of higher ratings.
 
-In others (e.g., Ceiling, Lighting), the effect of greenness is weak or too uncertain to be conclusive.
+In others (e.g., Combined+, Ceiling-, Lighting-), the effect of greenness is weak or too uncertain to be conclusive.
 
-Overall, this pattern supports the idea that the impact of greenness on perceived hominess is context-dependent, rather than consistent across all image types.
+The large uncertainty (variance) in the greenness slope under the Lighting condition is primarily driven by participant-level variability, rather than differences between images.The best model did not retain a random slope for greenness by ImageNumber, indicating that greenness effects were relatively consistent across images.
+
+Overall, this pattern supports the idea that the impact of greenness on ratings is context-dependent, rather than consistent across all image types.
 
 
 
