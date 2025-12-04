@@ -1,0 +1,122 @@
+---
+title: "basic_LMM"
+output: html_document
+date: "2025-12-01"
+---
+
+
+This is a R notebook to analyze the ratings of architectural images using linear mixed models.
+
+
+# Data preparation
+
+```{r load libraries, include=FALSE}
+library(tidyverse)
+# load the libraries for LMM
+library(lme4)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+
+```{r preprocess, include=FALSE}
+# Read the two CSV files
+# Set show_col_types = FALSE to keep console clean.
+df   <- readr::read_csv("Data_exp1.csv",  show_col_types = FALSE)
+
+
+# Set Plus as the reference level in Category
+df$Category <- relevel(factor(df$Category), ref = "Combined+")
+```
+
+# Modelling
+## Find the best model
+
+```{r best model, echo=TRUE, warning=FALSE}
+# find the best model
+source("select_lmm.R")
+best_model <- select_lmm(
+  data       = df,
+  dv         = "mean_rating",
+  fixed_main = "Category",
+  group_subj = "Participant",
+  group_item = "ImageNumber",
+  verbose    = TRUE
+)
+
+```
+
+## Check the output
+
+```{r model output}
+# check the result of best model
+summary(best_model)
+Anova(best_model, type = 'III')
+# Save the model object to a file
+saveRDS(best_model, file = "best_model.rds")
+```
+
+A linear mixed-effects model was fitted to examine the effect of Category on mean ratings. The model included Category as a fixed effect, random intercepts for Participant and ImageNumber, and random slopes of Category by Participant. The model revealed a significant overall effect of Category,
+χ²(4) = 258.67, p < .001, indicating that mean ratings differed reliably across conditions.
+
+The estimated marginal means showed that Combined+ received the highest ratings (estimate = 5.40), whereas all other negative conditions were rated significantly lower. Compared with Combined+, ratings decreased by 1.28 for Biophilic- (p < .001), 0.79 for Ceiling- (p < .001), 2.73 for Combined- (p < .001), and 1.81 for Lighting- (p < .001). Thus, Combined+ produced consistently superior subjective evaluations relative to all negative conditions.
+
+## Posthoc comparisons
+```{r model output}
+# Estimated marginal means for Category
+emm_cat <- emmeans(best_model, ~ Category)
+
+# Residual SD from the model (for standardized effect size d)
+resid_sd <- sigma(best_model)
+
+# Pairwise comparisons (Tukey)
+pairwise_emm <- pairs(emm_cat, adjust = "tukey")
+
+# Add 95% CI to pairwise results
+pairwise_results <- summary(pairwise_emm, infer = TRUE) %>%
+  as.data.frame() %>%
+    rename(
+    Comparison = contrast,
+    Difference = estimate,
+    Std_Error  = SE,
+    DF         = df,
+    z_value    = z.ratio,
+    P_value    = p.value,
+    CI_low     = asymp.LCL,
+    CI_high    = asymp.UCL
+  ) %>%
+  mutate(effect_size = Difference / resid_sd) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+pairwise_results
+
+```
+
+Pairwise comparisons among the negative conditions further revealed that Combined- was rated significantly lower than all other categories (all ps < .001). Additionally, Ceiling- was rated higher than Lighting- (difference = 1.02, p < .001). The difference between Biophilic- and Ceiling- and between Biophilic- and Lighting- did not reach significance (ps > .05), suggesting that these two conditions elicited comparable evaluations.
+
+Taken together, the results indicate a robust effect of Category, with Combined+ performing best, Combined- performing worst, and the remaining negative conditions occupying intermediate positions, with only selective significant differences among them.
+
+```{r echo=FALSE}
+emm_df <- as.data.frame(emm_cat)
+order = c("Combined+", "Ceiling-", "Biophilic-", "Lighting-", "Combined-")
+ggplot(emm_df,
+       aes(x = factor(Category, levels = order),
+           y = emmean,
+           fill = Category)) +
+  geom_col(width = 0.7) +
+  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL),
+                position = position_dodge(width = 0.8),
+                width = 0.2) +
+  labs(
+    title = "Model-Predicted Rating by Category",
+    x = "Category",
+    y = "Predicted Rating"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold")
+  )
+```
+
