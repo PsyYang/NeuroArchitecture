@@ -30,6 +30,7 @@ df   <- readr::read_csv("Data_exp1.csv",  show_col_types = FALSE)
 df$Category <- relevel(factor(df$Category), ref = "Combined+")
 ```
 
+
 # Modelling
 ## Find the best model
 
