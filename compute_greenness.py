@@ -5,8 +5,6 @@ import pandas as pd
 from PIL import Image, ImageFile, ImageOps
 import matplotlib.pyplot as plt
 
-# Allow loading truncated images without raising errors
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def natural_key(s):
@@ -146,7 +144,7 @@ def compute_greenness(images_dir="Images",
 
     # Save results as CSV in current directory
     df = pd.DataFrame(records)
-    csv_path = Path("Image_info.csv")
+    csv_path = Path("Image_greenness.csv")
     df.to_csv(csv_path, index=False)
     print(f"[DONE] Saved {len(df)} entries to {csv_path.name}")
     return df
