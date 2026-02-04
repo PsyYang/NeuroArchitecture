@@ -1,0 +1,269 @@
+---
+title: "Dimensions LMM"
+output: html_notebook
+---
+
+Analyze each rating dimension separately using LMM.
+
+
+# Data preparation
+## load libraries
+
+```{r load libraries, include=FALSE}
+library(tidyverse)
+# load the libraries for LMM
+library(lme4)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+## Read and preprocess data
+```{r preprocess, include=FALSE}
+# Read the two CSV files
+# Set show_col_types = FALSE to keep console clean.
+df   <- readr::read_csv("Data_exp1.csv",  show_col_types = FALSE)
+
+# Set Plus as the reference level in Category
+df$Category <- relevel(factor(df$Category), ref = "Combined+")
+```
+
+# Define functions
+## Pairwise comparisons
+```{r pairwise}
+emm_options(
+  lmer.df = "satterthwaite",
+  lmerTest.limit = 10000,
+  pbkrtest.limit = 0
+)
+
+emm_pairwise_table <- function(model, factor_var = "Category", digits = 3) {
+  
+  # Estimated marginal means
+  emm <- emmeans(model, as.formula(paste("~", factor_var)))
+  
+  # Residual SD (for standardized effect size d)
+  resid_sd <- sigma(model)
+  
+  # Pairwise comparisons (Tukey)
+  pw <- pairs(emm, adjust = "tukey")
+  
+  # Tidy output
+  results <- summary(pw, infer = TRUE) %>%
+    as.data.frame() %>%
+    rename(
+      Comparison = contrast,
+      Difference = estimate,
+      Std_Error  = SE,
+      DF         = df,
+      t_value    = t.ratio,
+      P_value    = p.value,
+      CI_low     = lower.CL,
+      CI_high    = upper.CL
+    ) %>%
+    mutate(
+      effect_size = Difference / resid_sd
+    ) %>%
+    mutate(
+      across(where(is.numeric), ~ round(.x, digits))
+    )
+  
+  return(results)
+}
+
+```
+
+## Plot
+```{r plot preditive rating}
+
+plot_predictive_rating <- function(model, factor_var = "Category") {
+  
+  # Estimated marginal means
+  emm <- emmeans(model, as.formula(paste("~", factor_var)))
+  emm_df <- as.data.frame(emm)
+  order = c("Combined+", "Ceiling-", "Biophilic-", "Lighting-", "Combined-")
+
+  ggplot(emm_df,
+       aes(x = factor(Category, levels = order),
+           y = emmean,
+           fill = Category)) +
+  geom_col(width = 0.7) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL),
+                position = position_dodge(width = 0.8),
+                width = 0.2) +
+  labs(
+    title = "Model-Predicted Rating by Category",
+    x = "Category",
+    y = "Predicted Rating"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold")
+  )
+}
+
+```
+
+
+# LMM
+
+For each rating dimensions, we built the LMM. 
+
+## Hominess
+### Model comparisons
+```{r}
+m1 <- lmer(Hominess ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+m2 <- lmer(Hominess ~ Category + (1 | Participant) + (1 | ImageNumber) +      (0 + Category || Participant), data=df, REML=FALSE)
+anova(m1, m2)
+```
+
+```{r}
+m3 <- lmer(Hominess ~ Category + (1 + Category | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+anova(m2, m3)
+anova(m1, m3)
+```
+
+### Model output
+```{r}
+# check the result of best model
+best_model_hominess <- m3
+summary(best_model_hominess)
+Anova(best_model_hominess, type = 'III')
+```
+### Posthoc comparisons
+```{r}
+pairwise_hominess <- emm_pairwise_table(best_model_hominess)
+pairwise_hominess
+```
+### Plot
+```{r}
+plot_predictive_rating(best_model_hominess)
+```
+
+
+## Personalness
+### Model comparisons
+```{r}
+m1 <- lmer(Personalness ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+m2 <- lmer(Personalness ~ Category + (1 | Participant) + (1 | ImageNumber) +      (0 + Category || Participant), data=df, REML=FALSE)
+anova(m1, m2)
+```
+
+```{r}
+m3 <- lmer(Personalness ~ Category + (1 | ImageNumber) +  (1 + Category | Participant), data=df, REML=FALSE)
+anova(m3, m2)
+anova(m3, m1)
+```
+### Model output
+```{r}
+# check the result of best model
+best_model_personalness <- m3
+summary(best_model_personalness)
+Anova(best_model_personalness, type = 'III')
+```
+### Posthoc comparisons
+```{r}
+pairwise_personalness <- emm_pairwise_table(best_model_personalness)
+pairwise_personalness
+```
+### Plot
+```{r}
+plot_predictive_rating(best_model_personalness)
+```
+
+## Naturalness
+### Model comparisons
+```{r}
+m1 <- lmer(Naturalness ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+m2 <- lmer(Naturalness ~ Category + (1 | Participant) + (1 | ImageNumber) + (0 + Category || Participant), data=df, REML=FALSE)
+anova(m1, m2)
+```
+```{r}
+m3 <- lmer(Naturalness ~ Category + (1 + Category | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+anova(m2, m3)
+anova(m1, m3)
+```
+
+### Model output
+```{r}
+# check the result of best model
+best_model_naturalness <- m3
+summary(best_model_naturalness)
+Anova(best_model_naturalness, type = 'III')
+```
+
+### Posthoc comparisons
+```{r}
+pairwise_naturalness <- emm_pairwise_table(best_model_naturalness)
+pairwise_naturalness
+```
+
+### Plot
+```{r}
+plot_predictive_rating(best_model_naturalness)
+```
+
+
+## Beauty
+### Model comparisons
+```{r}
+m1 <- lmer(Beauty ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+m2 <- lmer(Beauty ~ Category + (1 | Participant) + (1 | ImageNumber) + (0 + Category || Participant), data=df, REML=FALSE)
+anova(m1, m2)
+```
+```{r}
+m3 <- lmer(Beauty ~ Category + (1 + Category | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+anova(m2, m3)
+anova(m1, m3)
+```
+### Model output
+```{r}
+# check the result of best model
+best_model_beauty <- m3
+summary(best_model_beauty)
+Anova(best_model_beauty, type = 'III')
+```
+
+### Posthoc comparisons
+```{r}
+pairwise_beauty <- emm_pairwise_table(best_model_beauty)
+pairwise_beauty
+```
+
+### Plot
+```{r}
+plot_predictive_rating(best_model_beauty)
+```
+
+
+## Approachability
+### Model comparisons
+```{r}
+m1 <- lmer(Approachability ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+m2 <- lmer(Approachability ~ Category + (1 | Participant) + (1 | ImageNumber) + (0 + Category || Participant), data=df, REML=FALSE)
+anova(m1, m2)
+```
+```{r}
+m3 <- lmer(Approachability ~ Category + (1 + Category | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+anova(m2, m3)
+anova(m1, m3)
+```
+### Model output
+```{r}
+# check the result of best model
+best_model_approachability <- m3
+summary(best_model_approachability)
+Anova(best_model_approachability, type = 'III')
+```
+### Posthoc comparisons
+```{r}
+pairwise_approachability <- emm_pairwise_table(best_model_approachability)
+pairwise_approachability
+```
+
+### Plot
+```{r}
+plot_predictive_rating(best_model_approachability)
+```
+
