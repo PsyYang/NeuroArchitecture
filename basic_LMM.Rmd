@@ -6,6 +6,7 @@ date: "2025-12-01"
 
 
 This is a R notebook to analyze the ratings of architectural images using linear mixed models.
+Here we computed the mean ratings acorss five dimensions as the dependant variable.
 
 
 # Data preparation
@@ -32,26 +33,30 @@ df$Category <- relevel(factor(df$Category), ref = "Combined+")
 
 
 # Modelling
-## Find the best model
+## Find the best model, use the manual, hypothesis-driven way
+```{r}
+m1 <- lmer(mean_rating ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+m2 <- lmer(mean_rating ~ Category + (1 | Participant) + (1 | ImageNumber) +      (0 + Category || Participant), data=df, REML=FALSE, control=lmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)))
+anova(m1, m2)
+```
 
-```{r best model, echo=TRUE, warning=FALSE}
-# find the best model
-source("select_lmm.R")
-best_model <- select_lmm(
-  data       = df,
-  dv         = "mean_rating",
-  fixed_main = "Category",
-  group_subj = "Participant",
-  group_item = "ImageNumber",
-  verbose    = TRUE
-)
+```{r}
+m3 <- lmer(mean_rating ~ Category + (1 + Category | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
+anova(m2, m3)
 
 ```
+```{r}
+AIC(m2, m3)
+BIC(m2, m3)
+anova(m1, m3)
+```
+The model m3, which included random slopes for Category on Participant with correlated slopes and intercepts, was selected as the optimal model. Although the likelihood ratio test between m2 and m3 was not significant, m3 had lower AIC and BIC values, indicating a better balance between model fit and complexity. Additionally, m3 did not exhibit convergence issues, unlike m2 and more complex models. Therefore, we concluded that m3 was the most appropriate model for our analysis. Further attempts to fit more complex models failed to converge, indicating that m3 was the most complex structure supported by the data.
 
 ## Check the output
 
 ```{r model output}
 # check the result of best model
+best_model <- m3
 summary(best_model)
 Anova(best_model, type = 'III')
 # Save the model object to a file
