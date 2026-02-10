@@ -1,6 +1,8 @@
 ---
 title: "Dimensions LMM"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 
 Analyze each rating dimension separately using LMM.
@@ -26,6 +28,9 @@ df   <- readr::read_csv("Data_exp1.csv",  show_col_types = FALSE)
 
 # Set Plus as the reference level in Category
 df$Category <- relevel(factor(df$Category), ref = "Combined+")
+order <- c("Combined+", "Ceiling-", "Biophilic-", "Lighting-", "Combined-")
+df$Category <- factor(df$Category, levels = order)
+
 ```
 
 # Define functions
@@ -36,6 +41,8 @@ emm_options(
   lmerTest.limit = 10000,
   pbkrtest.limit = 0
 )
+
+
 
 emm_pairwise_table <- function(model, factor_var = "Category", digits = 3) {
   

@@ -36,7 +36,7 @@ df$Category <- relevel(factor(df$Category), ref = "Combined+")
 ## Find the best model, use the manual, hypothesis-driven way
 ```{r}
 m1 <- lmer(mean_rating ~ Category + (1 | Participant) + (1 | ImageNumber), data=df, REML=FALSE)
-m2 <- lmer(mean_rating ~ Category + (1 | Participant) + (1 | ImageNumber) +      (0 + Category || Participant), data=df, REML=FALSE, control=lmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)))
+m2 <- lmer(mean_rating ~ Category + (1 | Participant) + (1 | ImageNumber) + (0 + Category || Participant), data=df, REML=FALSE, control=lmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)))
 anova(m1, m2)
 ```
 
@@ -71,7 +71,15 @@ The estimated marginal means showed that Combined+ received the highest ratings 
 ## Posthoc comparisons
 ```{r model output}
 # Estimated marginal means for Category
-emm_cat <- emmeans(best_model, ~ Category)
+emm_options(
+  lmer.df = "satterthwaite",
+  lmerTest.limit = 10000,
+  pbkrtest.limit = 0
+)
+
+order = c("Combined+", "Ceiling-", "Biophilic-", "Lighting-", "Combined-")
+
+emm_cat <- emmeans(best_model, ~ Category, at = list(Category = order))
 
 # Residual SD from the model (for standardized effect size d)
 resid_sd <- sigma(best_model)
@@ -87,10 +95,10 @@ pairwise_results <- summary(pairwise_emm, infer = TRUE) %>%
     Difference = estimate,
     Std_Error  = SE,
     DF         = df,
-    z_value    = z.ratio,
+    t_value    = t.ratio,
     P_value    = p.value,
-    CI_low     = asymp.LCL,
-    CI_high    = asymp.UCL
+    CI_low     = lower.CL,
+    CI_high    = upper.CL
   ) %>%
   mutate(effect_size = Difference / resid_sd) %>%
   mutate(across(where(is.numeric), ~ round(.x, 3)))
@@ -105,13 +113,13 @@ Taken together, the results indicate a robust effect of Category, with Combined+
 
 ```{r echo=FALSE}
 emm_df <- as.data.frame(emm_cat)
-order = c("Combined+", "Ceiling-", "Biophilic-", "Lighting-", "Combined-")
+
 ggplot(emm_df,
        aes(x = factor(Category, levels = order),
            y = emmean,
            fill = Category)) +
   geom_col(width = 0.7) +
-  geom_errorbar(aes(ymin = asymp.LCL, ymax = asymp.UCL),
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL),
                 position = position_dodge(width = 0.8),
                 width = 0.2) +
   labs(
@@ -122,7 +130,8 @@ ggplot(emm_df,
   theme_minimal(base_size = 14) +
   theme(
     legend.position = "none",
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold", hjust = 0.5)
   )
+
 ```
 
