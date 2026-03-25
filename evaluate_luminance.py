@@ -5,6 +5,7 @@ import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from skimage import color
 
 def natural_key(s):
     """
@@ -30,7 +31,10 @@ for idx, p in enumerate(files, start=1):
     rgb = np.array(img.convert('RGB'))
 
     # Weighted luminance formula (ITU-R BT.601)
-    luminance = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
+    # luminance = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+    # CIELAB standard
+    lab = color.rgb2lab(rgb)
+    luminance = lab[:,:,0]
 
     avg_luminance = luminance.mean()
     luminance_list.append([idx, p, avg_luminance])
@@ -43,6 +47,8 @@ luminance_df.to_csv("Image_luminance.csv", index=False)
 # load the experimental data
 df_img = pd.read_csv("Data_exp1.csv",usecols=["ImageNumber", "Category"]).drop_duplicates()
 df_luminance = pd.merge(left=df_img, right=luminance_df, on="ImageNumber")
+print(df_luminance.shape)
+print(df_luminance.groupby("Category").size())
 
 
 # Plots
@@ -59,7 +65,6 @@ plt.show()
 # ANOVA
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
-from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 # one-way ANOVA
 model = ols("Luminance ~ C(Category)", data=df_luminance).fit()
