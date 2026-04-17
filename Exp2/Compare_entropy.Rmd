@@ -1,0 +1,311 @@
+---
+title: "Entropy LMM"
+output: html_notebook
+---
+
+# Data preparation
+## Load the libraries
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(afex)
+library(emmeans)
+```
+
+## Read and proprecess data
+```{r}
+source("load_data.R") 
+```
+
+
+
+```{r}
+# --- Helper Function to Calculate Shannon Entropy ---
+# This converts continuous ratings into discrete probability distributions for entropy
+calc_shannon <- function(x) {
+  # Assuming ratings are integers or can be grouped into 1-7 levels
+  p <- table(factor(x, levels = 1:7)) / length(x)
+  p <- p[p > 0] # Remove zero probabilities to avoid log(0)
+  return(-sum(p * log(p)))
+}
+```
+
+```{r}
+# --- Define the dimensions of interest ---
+dims <- c("Hominess", "Naturalness", "Personalness", "Beauty", "Approachability", "mean_rating")
+
+# --- 1. Subject-level Variability (Each row is one Participant per Category) ---
+# DF1: SD within each subject
+df_subject_sd <- df %>%
+  group_by(Participant, Group, Category) %>%
+  summarise(across(all_of(dims), list(mean = mean, sd = sd), .names = "{.col}_{.fn}"), .groups = 'drop')
+
+# DF2: Entropy within each subject
+df_subject_entropy <- df %>%
+  group_by(Participant, Group, Category) %>%
+  summarise(across(all_of(dims), list(mean = mean, ent = calc_shannon), .names = "{.col}_{.fn}"), .groups = 'drop')
+
+
+# --- 2. Item-level Variability (Each row is one ImageID per Group per Category) ---
+# DF3: SD across different subjects for the same image
+df_item_sd <- df %>%
+  group_by(ImageNumber, Group, Category) %>%
+  summarise(across(all_of(dims), list(mean = mean, sd = sd), .names = "{.col}_{.fn}"), .groups = 'drop')
+
+# DF4: Entropy across different subjects for the same image
+df_item_entropy <- df %>%
+  group_by(ImageNumber, Group, Category) %>%
+  summarise(across(all_of(dims), list(mean = mean, ent = calc_shannon), .names = "{.col}_{.fn}"), .groups = 'drop')
+
+# --- Final Check ---
+cat("Generated DataFrames:\n")
+cat("- df_subject_sd: (Subject-level variation using SD)\n")
+cat("- df_subject_entropy: (Subject-level variation using Entropy)\n")
+cat("- df_item_sd: (Item-level variation using SD)\n")
+cat("- df_item_entropy: (Item-level variation using Entropy)\n")
+
+```
+
+
+# ANOVA
+
+```{r}
+# ---  Function: analyze_variability (Dual Compatibility) ---
+analyze_variability <- function(data, dv, dv_label) {
+  
+  # --- 1. Identify Data Level and Structure ---
+  if("Participant" %in% names(data)) {
+    # Subject-level: Group is Between, Category is Within
+    id_var <- "Participant"
+    between_var <- "Group"
+    within_var <- "Category"
+    data_type <- "Subject-level"
+  } else if("ImageID" %in% names(data) | "ImageNumber" %in% names(data)) {
+    # Item-level: Category is Between, Group is Within
+    id_var <- if("ImageID" %in% names(data)) "ImageID" else "ImageNumber"
+    between_var <- "Category"
+    within_var <- "Group"
+    data_type <- "Item-level"
+  } else {
+    stop("Data must contain either 'Participant' or 'ImageID/ImageNumber'.")
+  }
+
+  cat(paste0("\n\n", paste(rep("=", 60), collapse = ""), "\n"))
+  cat(paste0("ANALYZING ", data_type, ": ", dv, "\n"))
+  cat(paste0(paste(rep("=", 60), collapse = ""), "\n"))
+
+  # --- 2. Run Mixed-Design ANOVA ---
+  # aov_ez handles the structure based on between and within arguments
+  anova_res <- aov_ez(id = id_var, 
+                      dv = dv, 
+                      data = data, 
+                      between = between_var, 
+                      within = within_var)
+  
+  cat("\n--- ANOVA Results (with Partial Eta Squared) ---\n")
+  print(anova_res, es = "pes")
+  
+  # --- 3. Post-hoc Comparisons & Cohen's d ---
+  # We always want to compare Groups within each Category
+  emm <- emmeans(anova_res, ~ Group | Category)
+  post_hoc_summary <- summary(pairs(emm, reverse = TRUE), infer = c(TRUE, TRUE))
+  
+  # Extract pooled error (MSE) for effect size calculation
+  mse <- anova_res$anova_table$MSE[1]
+  pooled_sd <- sqrt(mse)
+  
+  reporting_table <- post_hoc_summary %>%
+    mutate(cohens_d = estimate / pooled_sd) %>%
+    select(Category, contrast, estimate, SE, df, lower.CL, upper.CL, t.ratio, p.value, cohens_d)
+  
+  cat("\n--- Post-hoc Comparisons (Control - ASD) & Cohen's d ---\n")
+  print(reporting_table)
+  
+  # --- 4. Visualization ---
+  # Use aes_string or the modern .data[[dv]] for dynamic column names
+  plot <- ggplot(data, aes(x = Category, y = .data[[dv]], fill = Group)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.5, width = 0.5, position = position_dodge(0.6)) +
+    geom_jitter(aes(color = Group), 
+                position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), 
+                alpha = 0.4, size = 1.5) +
+    scale_fill_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+    scale_color_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+    labs(y = dv_label, x = "Category", title = paste(data_type, "Analysis:", dv)) +
+    theme_bw() +
+    theme(legend.position = "top", axis.title = element_text(face = "bold"))
+  
+  print(plot)
+  
+  return(list(anova = anova_res, post_hoc = reporting_table, plot = plot))
+}
+```
+
+
+```{r}
+# List of all Entropy columns in the subject_entropy dataframe
+target_cols <- c("Hominess_ent", "Naturalness_ent", "Personalness_ent", "Beauty_ent", "Approachability_ent")
+
+# Loop through each and generate reports
+for(col in target_cols) {
+  analyze_variability(df_subject_entropy, col, paste("Entropy of", gsub("_ent", "", col)))
+}
+```
+
+
+```{r}
+# List of all SD columns in your subject_sd dataframe
+target_cols <- c("mean_rating_sd", "Hominess_sd", "Naturalness_sd", "Personalness_sd", "Beauty_sd", "Approachability_sd")
+
+# Loop through each and generate reports
+for(col in target_cols) {
+  analyze_variability(df_subject_sd, col, paste("SD of", gsub("_sd", "", col)))
+}
+```
+For all individual dimensions, the interaction effects were significant. Specifically, the SD of ASD group was significantly higher than neurotypical group when viewing Plus images but not Minus Images.
+
+```{r}
+# List of all Entropy columns in the item_entropy dataframe
+target_cols <- c("Hominess_ent", "Naturalness_ent", "Personalness_ent", "Beauty_ent", "Approachability_ent")
+
+# Loop through each and generate reports
+for(col in target_cols) {
+  analyze_variability(df_item_entropy, col, paste("Entropy of", gsub("_ent", "", col)))
+}
+```
+In each ASD-CTRL comparison, the entropy of ASD group is higher. 
+
+```{r}
+# List of all SD columns in the item_sd dataframe
+target_cols <- c("mean_rating_sd", "Hominess_sd", "Naturalness_sd", "Personalness_sd", "Beauty_sd", "Approachability_sd")
+
+# Loop through each and generate reports
+for(col in target_cols) {
+  analyze_variability(df_item_sd, col, paste("SD of", gsub("_sd", "", col)))
+}
+```
+
+
+# Combined plot
+## Entropy
+```{r}
+# --- Function: plot_combined_entropy ---
+# Generates a 2x3 grid with 5 subplots (Excluding Mean)
+plot_combined_entropy <- function(data) {
+  library(tidyverse)
+  library(stringr)
+  
+  # 1. Identify ID variable: Subject-level (Participant) or Item-level (ImageNumber)
+  id_var <- if("Participant" %in% names(data)) "Participant" else "ImageNumber"
+  
+  # 2. Define 5 raw aesthetic dimensions (Excluding Mean)
+  dims <- c("Hominess", "Naturalness", "Personalness", "Beauty", "Approachability")
+  raw_cols <- paste0(dims, "_ent")
+  
+  # 3. Pivot to long format
+  df_long <- data %>%
+    select(any_of(id_var), Group, Category, all_of(raw_cols)) %>%
+    pivot_longer(
+      cols = all_of(raw_cols),
+      names_to = "Dimension",
+      values_to = "Value"
+    ) %>%
+    # Dynamically remove suffix for clean labels
+    mutate(Dimension = factor(Dimension, levels = raw_cols, labels = dims))
+  
+  # 4. Generate the plot
+  ggplot(df_long, aes(x = Category, y = Value, fill = Group)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6, width = 0.5, position = position_dodge(0.6)) +
+    geom_jitter(aes(color = Group), 
+                position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), 
+                alpha = 0.3, size = 0.8) +
+    facet_wrap(~Dimension, nrow = 2, ncol = 3, scales = "free_y") +
+    scale_fill_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+    scale_color_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+    labs(
+      y = "Shannon Entropy (Bits)",
+      x = "Stimulus Category",
+      title = paste("Rating Uncertainty (Entropy):", 
+                   ifelse(id_var == "Participant", "Subject-level", "Item-level"))
+    ) +
+    theme_bw() +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = "grey95"), 
+      strip.text = element_text(face = "bold", size = 10),
+      legend.position = "top",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+    )
+}
+```
+
+
+## SD
+
+```{r}
+# --- Function: plot_combined_sd ---
+# Generates a full 2x3 grid with 6 subplots (Including Mean)
+plot_combined_sd <- function(data) {
+  library(tidyverse)
+  library(stringr)
+  
+  # 1. Identify ID variable
+  id_var <- if("Participant" %in% names(data)) "Participant" else "ImageNumber"
+  
+  # 2. Define all 6 columns (Mean + 5 Dimensions)
+  raw_cols <- c("mean_rating_sd", "Hominess_sd", "Naturalness_sd", 
+                "Personalness_sd", "Beauty_sd", "Approachability_sd")
+  clean_labels <- c("Mean", "Hominess", "Naturalness", "Personalness", "Beauty", "Approachability")
+  
+  # 3. Pivot to long format
+  df_long <- data %>%
+    select(any_of(id_var), Group, Category, all_of(raw_cols)) %>%
+    pivot_longer(
+      cols = all_of(raw_cols),
+      names_to = "Dimension",
+      values_to = "Value"
+    ) %>%
+    mutate(Dimension = factor(Dimension, levels = raw_cols, labels = clean_labels))
+  
+  # 4. Generate the plot
+  ggplot(df_long, aes(x = Category, y = Value, fill = Group)) +
+    geom_boxplot(outlier.shape = NA, alpha = 0.6, width = 0.5, position = position_dodge(0.6)) +
+    geom_jitter(aes(color = Group), 
+                position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), 
+                alpha = 0.3, size = 0.8) +
+    facet_wrap(~Dimension, nrow = 2, ncol = 3, scales = "free_y") +
+    scale_fill_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+    scale_color_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+    labs(
+      y = "Standard Deviation (SD)",
+      x = "Stimulus Category",
+      title = paste("Rating Variability (SD):", 
+                   ifelse(id_var == "Participant", "Subject-level", "Item-level"))
+    ) +
+    theme_bw() +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = "grey95"), 
+      strip.text = element_text(face = "bold", size = 10),
+      legend.position = "top",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+    )
+}
+```
+
+
+## Print
+```{r}
+# 1. Generate Subject-level Plots
+p_sub_ent <- plot_combined_entropy(df_subject_entropy)
+p_sub_sd  <- plot_combined_sd(df_subject_sd)
+
+# 2. Generate Item-level Plots
+p_item_ent <- plot_combined_entropy(df_item_entropy)
+p_item_sd  <- plot_combined_sd(df_item_sd)
+
+# 3. Display specific plots
+print(p_sub_ent)
+print(p_sub_sd)
+print(p_item_ent)
+print(p_item_sd)
+```

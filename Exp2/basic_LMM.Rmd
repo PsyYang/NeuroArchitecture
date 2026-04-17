@@ -1,0 +1,115 @@
+---
+title: "NeuroArchitecture Exp2 LMM for mean ratings"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+# Data preparation
+## Load the libraries
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lme4)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+## Read data
+```{r}
+source("load_data.R")
+```
+```{r}
+head(df)
+```
+
+
+
+# Modelling
+## Model selection
+
+```{r}
+m1 <- lmer(mean_rating ~ Category + Group + (1 | Participant) + (1 | ImageNumber), data=df)
+m2 <- lmer(mean_rating ~ Category * Group + (1 | Participant) + (1 | ImageNumber), data=df)
+anova(m1, m2)
+```
+
+
+```{r}
+m3 <- lmer(mean_rating ~ Category * Group + (1 + Category | Participant) + (1 | ImageNumber), 
+           data = df)
+anova(m3, m2)
+```
+
+```{r}
+m4 <- lmer(mean_rating ~ Category * Group + (1 + Category | Participant) + (1 + Group | ImageNumber), 
+           data = df)
+anova(m3, m4)
+```
+
+
+
+
+## Best model
+
+```{r}
+best_model <- m4
+summary(best_model)
+Anova(best_model)
+```
+## Post hoc
+```{r}
+emm_options(pbkrtest.limit = 3700) 
+emm_options(lmerTest.limit = 3700)
+# This calculates the mean rating for each combination of Group and Category
+emm_results <- emmeans(best_model, ~ Group * Category)
+
+# --- 2. Perform Pairwise Comparisons ---
+# We split the comparison by Category to see the Group difference in Minus and Plus separately
+# 'adjust = "tukey"' handles multiple comparison correction
+post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
+
+# Display the statistical results (t-ratio, p-values, and estimates)
+cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+summary(post_hoc_stats, infer = c(TRUE, TRUE))
+```
+
+```{r}
+# This focuses on the magnitude of the difference between groups
+cat("\n--- Effect Sizes (Cohen's d) ---\n")
+eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.residual(best_model))
+
+# Extracting only the estimate to keep the output clean as requested
+print(eff_size_results)
+```
+
+
+# Plotting
+```{r}
+interaction_plot <- emmip(best_model, Group ~ Category, CIs = TRUE) +
+  theme_minimal() +
+  labs(title = "Interaction Effect: Group by Category",
+       y = "Estimated Marginal Mean (Rating)",
+       x = "Stimulus Category") +
+  scale_color_manual(values = c("ASD" = "#F8766D", "Control" = "#00BFC4"))
+
+print(interaction_plot)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(x = mean_rating, fill = Group)) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~Category) +
+  theme_minimal() +
+  labs(title = "Distribution Density of Mean Rating: ASD vs Control",
+       x = "Mean Rating", y = "Density") +
+  theme(
+    # hjust = 0.5 centers the text
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  )
+```
+

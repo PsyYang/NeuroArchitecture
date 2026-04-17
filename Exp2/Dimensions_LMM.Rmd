@@ -1,0 +1,372 @@
+---
+title: "NeuroArchitecture Exp2 LMM for each dimension ratings"
+output: html_notebook
+---
+
+# Data preparation
+## Load the libraries
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(lme4)
+library(lmerTest)
+library(car)
+library(emmeans)
+```
+
+## Read data
+
+```{r}
+source("load_data.R")
+```
+
+
+# Hominess
+## Model selection
+
+```{r}
+m1 <- lmer(Hominess ~ Category + Group + (1 | Participant) + (1 | ImageNumber), data=df)
+m2 <- lmer(Hominess ~ Category * Group + (1 | Participant) + (1 | ImageNumber), data=df)
+anova(m1, m2)
+```
+
+```{r}
+m3 <- lmer(Hominess ~ Category + Group + (1 + Category | Participant) + (1 | ImageNumber), data=df)
+anova(m2, m3)
+```
+
+```{r}
+m4 <- lmer(Hominess ~ Category * Group + (1 + Category | Participant) + (1 | ImageNumber), data=df)
+anova(m3, m4)
+```
+
+```{r}
+m5 <- lmer(Hominess ~ Category * Group + (1 + Category | Participant) + (1 + Group | ImageNumber), data=df)
+anova(m4, m5)
+```
+
+## Best model
+
+```{r}
+best_model <- m5
+summary(best_model)
+Anova(best_model)
+```
+## Post-hoc tests
+```{r}
+emm_options(pbkrtest.limit = 3700) 
+emm_options(lmerTest.limit = 3700)
+# This calculates the mean rating for each combination of Group and Category
+emm_results <- emmeans(best_model, ~ Group * Category)
+
+# --- 2. Perform Pairwise Comparisons ---
+# We split the comparison by Category to see the Group difference in Minus and Plus separately
+# 'adjust = "tukey"' handles multiple comparison correction
+post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
+
+# Display the statistical results (t-ratio, p-values, and estimates)
+cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+summary(post_hoc_stats, infer = c(TRUE, TRUE))
+```
+```{r}
+# This focuses on the magnitude of the difference between groups
+cat("\n--- Effect Sizes (Cohen's d) ---\n")
+eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.residual(best_model))
+
+# Extracting only the estimate to keep the output clean as requested
+print(eff_size_results)
+```
+
+# Naturalness
+## Model selection
+
+```{r}
+m1 <- lmer(Naturalness ~ Category + Group + (1 | Participant) + (1 | ImageNumber), data=df)
+m2 <- lmer(Naturalness ~ Category * Group + (1 | Participant) + (1 | ImageNumber), data=df)
+anova(m1, m2)
+```
+
+
+
+```{r}
+m3 <- lmer(Naturalness ~ Category + Group + (1 + Category | Participant) + (1 | ImageNumber), data = df)
+anova(m3, m2)
+```
+```{r}
+m4 <- lmer(Naturalness ~ Category * Group + (1 + Category | Participant) + (1 | ImageNumber), data = df)
+anova(m3, m4)
+```
+
+
+```{r}
+m5 <- lmer(Naturalness ~ Category * Group + (1 + Category | Participant) + (1 + Group | ImageNumber), 
+           data = df)
+anova(m5, m4)
+```
+## Best model
+
+```{r}
+best_model <- m4
+summary(best_model)
+Anova(best_model)
+```
+## Post-hoc tests
+```{r}
+emm_options(pbkrtest.limit = 3700) 
+emm_options(lmerTest.limit = 3700)
+# This calculates the mean rating for each combination of Group and Category
+emm_results <- emmeans(best_model, ~ Group * Category)
+
+# --- 2. Perform Pairwise Comparisons ---
+# We split the comparison by Category to see the Group difference in Minus and Plus separately
+# 'adjust = "tukey"' handles multiple comparison correction
+post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
+
+# Display the statistical results (t-ratio, p-values, and estimates)
+cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+summary(post_hoc_stats, infer = c(TRUE, TRUE))
+```
+```{r}
+# This focuses on the magnitude of the difference between groups
+cat("\n--- Effect Sizes (Cohen's d) ---\n")
+eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.residual(best_model))
+
+# Extracting only the estimate to keep the output clean as requested
+print(eff_size_results)
+```
+
+# Personalness
+## Model selection
+
+```{r}
+m1 <- lmer(Personalness ~ Category + Group + (1 | Participant) + (1 | ImageNumber), data=df)
+m2 <- lmer(Personalness ~ Category * Group + (1 | Participant) + (1 | ImageNumber), data=df)
+anova(m1, m2)
+```
+
+```{r}
+m3 <- lmer(Personalness ~ Category + Group + (1 + Category | Participant) + (1 | ImageNumber), 
+           data = df)
+anova(m3, m2)
+```
+
+```{r}
+m4 <- lmer(Personalness ~ Category * Group + (1 + Category | Participant) + (1 | ImageNumber), data = df)
+anova(m4, m3)
+```
+
+```{r}
+m5 <- lmer(Personalness ~ Category * Group + (1 + Category | Participant) + (1 + Group | ImageNumber), data = df)
+anova(m5, m4)
+```
+
+## Best model
+
+```{r}
+best_model <- m5
+summary(best_model)
+Anova(best_model)
+```
+
+## Post-hoc tests
+```{r}
+emm_options(pbkrtest.limit = 3700) 
+emm_options(lmerTest.limit = 3700)
+# This calculates the mean rating for each combination of Group and Category
+emm_results <- emmeans(best_model, ~ Group * Category)
+
+# --- 2. Perform Pairwise Comparisons ---
+# We split the comparison by Category to see the Group difference in Minus and Plus separately
+# 'adjust = "tukey"' handles multiple comparison correction
+post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
+
+# Display the statistical results (t-ratio, p-values, and estimates)
+cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+summary(post_hoc_stats, infer = c(TRUE, TRUE))
+```
+```{r}
+# This focuses on the magnitude of the difference between groups
+cat("\n--- Effect Sizes (Cohen's d) ---\n")
+eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.residual(best_model))
+
+# Extracting only the estimate to keep the output clean as requested
+print(eff_size_results)
+```
+
+# Approachability
+## Model selection
+
+```{r}
+m1 <- lmer(Approachability ~ Category + Group + (1 | Participant) + (1 | ImageNumber), data=df)
+m2 <- lmer(Approachability ~ Category * Group + (1 | Participant) + (1 | ImageNumber), data=df)
+anova(m1, m2)
+```
+
+```{r}
+m3 <- lmer(Approachability ~ Category + Group + (1 + Category | Participant) + (1 | ImageNumber), 
+           data = df)
+anova(m2, m3)
+```
+```{r}
+m4 <- lmer(Approachability ~ Category * Group + (1 + Category | Participant) + (1 | ImageNumber), 
+           data = df)
+anova(m3, m4)
+```
+```{r}
+m5 <- lmer(Approachability ~ Category * Group + (1 + Category | Participant) + (1 + Group | ImageNumber), 
+           data = df)
+anova(m5, m4)
+```
+
+## Best model
+
+```{r}
+best_model <- m5
+summary(best_model)
+Anova(best_model)
+```
+## Post-hoc tests
+```{r}
+emm_options(pbkrtest.limit = 3700) 
+emm_options(lmerTest.limit = 3700)
+# This calculates the mean rating for each combination of Group and Category
+emm_results <- emmeans(best_model, ~ Group * Category)
+
+# --- 2. Perform Pairwise Comparisons ---
+# We split the comparison by Category to see the Group difference in Minus and Plus separately
+# 'adjust = "tukey"' handles multiple comparison correction
+post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
+
+# Display the statistical results (t-ratio, p-values, and estimates)
+cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+summary(post_hoc_stats, infer = c(TRUE, TRUE))
+```
+```{r}
+# This focuses on the magnitude of the difference between groups
+cat("\n--- Effect Sizes (Cohen's d) ---\n")
+eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.residual(best_model))
+
+# Extracting only the estimate to keep the output clean as requested
+print(eff_size_results)
+```
+
+# Beauty
+## Model selection
+
+```{r}
+m1 <- lmer(Beauty ~ Category + Group + (1 | Participant) + (1 | ImageNumber), data=df)
+m2 <- lmer(Beauty ~ Category * Group + (1 | Participant) + (1 | ImageNumber), data=df)
+anova(m1, m2)
+```
+
+```{r}
+m3 <- lmer(Beauty ~ Category + Group + (1 + Category | Participant) + (1 | ImageNumber), data = df)
+anova(m3, m2)
+```
+```{r}
+m4 <- lmer(Beauty ~ Category * Group + (1 + Category | Participant) + (1 | ImageNumber), 
+           data = df)
+anova(m3, m4)
+```
+```{r}
+m5 <- lmer(Beauty ~ Category * Group + (1 + Category | Participant) + (1 + Group | ImageNumber), 
+           data = df)
+anova(m5, m4)
+```
+M4 is more satble.
+
+## Best model
+```{r}
+best_model <- m4
+summary(best_model)
+Anova(best_model)
+```
+## Post-hoc tests
+```{r}
+emm_options(pbkrtest.limit = 3700) 
+emm_options(lmerTest.limit = 3700)
+# This calculates the mean rating for each combination of Group and Category
+emm_results <- emmeans(best_model, ~ Group * Category)
+
+# --- 2. Perform Pairwise Comparisons ---
+# We split the comparison by Category to see the Group difference in Minus and Plus separately
+# 'adjust = "tukey"' handles multiple comparison correction
+post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
+
+# Display the statistical results (t-ratio, p-values, and estimates)
+cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+summary(post_hoc_stats, infer = c(TRUE, TRUE))
+```
+```{r}
+# This focuses on the magnitude of the difference between groups
+cat("\n--- Effect Sizes (Cohen's d) ---\n")
+eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.residual(best_model))
+
+# Extracting only the estimate to keep the output clean as requested
+print(eff_size_results)
+```
+# Combined plots
+Raw rating not estimated marginal means.
+```{r}
+library(tidyverse)
+
+# --- 1. Aggregate Trial data to Subject-level Means ---
+# We calculate the mean for the global score and each individual dimension
+subject_means <- df %>%
+  group_by(Participant, Group, Category) %>%
+  summarise(
+    mean_rating = mean(mean_rating, na.rm = TRUE),
+    Hominess = mean(Hominess, na.rm = TRUE),
+    Naturalness = mean(Naturalness, na.rm = TRUE),
+    Personalness = mean(Personalness, na.rm = TRUE),
+    Beauty = mean(Beauty, na.rm = TRUE),
+    Approachability = mean(Approachability, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# --- 2. Define Columns and Transform to Long Format ---
+raw_cols <- c("mean_rating", "Hominess", "Naturalness", 
+              "Personalness", "Beauty", "Approachability")
+
+mean_ratings_long <- subject_means %>%
+  pivot_longer(
+    cols = all_of(raw_cols),
+    names_to = "Dimension",
+    values_to = "Avg_Rating"
+  ) %>%
+  mutate(Dimension = factor(Dimension, 
+                            levels = raw_cols, 
+                            labels = c("Global Mean", "Hominess", "Naturalness", 
+                                       "Personalness", "Beauty", "Approachability")))
+
+# --- 3. Create the Combined Plot (2x3 Grid) ---
+combined_mean_plot <- ggplot(mean_ratings_long, aes(x = Category, y = Avg_Rating, fill = Group)) +
+  # Boxplots
+  geom_boxplot(outlier.shape = NA, alpha = 0.6, width = 0.5, position = position_dodge(0.6)) +
+  # Individual data points (each point represents one participant's mean)
+  geom_jitter(aes(color = Group), 
+              position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6), 
+              alpha = 0.4, size = 1) +
+  # Use free_y to let each dimension show its own range clearly
+  facet_wrap(~Dimension, nrow = 2, ncol = 3, scales = "free_y") +
+  # Scientific color palette
+  scale_fill_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+  scale_color_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+  labs(
+    y = "Average Rating (1-7)",
+    x = "Stimulus Category",
+    title = "Subject-level Mean Ratings Across Dimensions"
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "grey95"), 
+    strip.text = element_text(face = "bold"),
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+# --- 4. Print Plot ---
+print(combined_mean_plot)
+```
+
