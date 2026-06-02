@@ -63,16 +63,14 @@ Anova(best_model)
 ```{r}
 emm_options(pbkrtest.limit = 3700) 
 emm_options(lmerTest.limit = 3700)
-# This calculates the mean rating for each combination of Group and Category
 emm_results <- emmeans(best_model, ~ Group * Category)
 
-# --- 2. Perform Pairwise Comparisons ---
+
 # We split the comparison by Category to see the Group difference in Minus and Plus separately
-# 'adjust = "tukey"' handles multiple comparison correction
 post_hoc_stats <- pairs(emm_results, by = "Category", reverse = TRUE, adjust = "tukey")
 
-# Display the statistical results (t-ratio, p-values, and estimates)
-cat("\n--- Post-hoc Comparisons: Control vs ASD within each Category ---\n")
+# Display the statistical results 
+cat("\n--- Post-hoc Comparisons: Neurotypical vs ASD within each Category ---\n")
 summary(post_hoc_stats, infer = c(TRUE, TRUE))
 ```
 
@@ -87,22 +85,13 @@ print(eff_size_results)
 
 
 # Plotting
-```{r}
-interaction_plot <- emmip(best_model, Group ~ Category, CIs = TRUE) +
-  theme_minimal() +
-  labs(title = "Interaction Effect: Group by Category",
-       y = "Estimated Marginal Mean (Rating)",
-       x = "Stimulus Category") +
-  scale_color_manual(values = c("ASD" = "#F8766D", "Control" = "#00BFC4"))
 
-print(interaction_plot)
-```
 
 ```{r}
 library(ggplot2)
 
 ggplot(df, aes(x = mean_rating, fill = Group)) +
-  geom_density(alpha = 0.4) +
+  geom_density(alpha = 0.5) +
   facet_wrap(~Category) +
   theme_minimal() +
   labs(title = "Distribution Density of Mean Rating: ASD vs Control",
@@ -110,6 +99,60 @@ ggplot(df, aes(x = mean_rating, fill = Group)) +
   theme(
     # hjust = 0.5 centers the text
     plot.title = element_text(hjust = 0.5, face = "bold", size = 14)
+  ) +
+  scale_fill_manual(values = c("ASD" = "#E64B35FF", "Neurotypical" = "#4DBBD5FF"))
+```
+
+```{r}
+library(ggpubr)
+
+# --- Updated Visualization Code (Spearman for small N) ---
+
+# Global setting: Disable scientific notation
+options(scipen = 999)
+
+dims <- c("Hominess", "Naturalness", "Personalness", "Beauty", "Approachability")
+
+df_item_means <- df |>
+  dplyr::group_by(ImageNumber, Group, Category) |>
+  dplyr::summarise(
+    dplyr::across(dplyr::all_of(dims), \(x) mean(x, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+df_corr_rating <- df_item_means |>
+  tidyr::pivot_longer(cols = dplyr::all_of(dims), names_to = "Dimension", values_to = "Rating") |>
+  dplyr::mutate(Dimension = factor(Dimension, levels = dims)) |>
+  tidyr::pivot_wider(names_from = Group, values_from = Rating)
+
+
+ggplot(df_corr_rating, aes(x = Control, y = ASD)) +
+  geom_point(alpha = 0.5, color = "#4682B4", size = 1.2) +
+  geom_smooth(method = "lm", formula = y ~ x, color = "red", linewidth = 0.8, se = FALSE) +
+  facet_grid(Category ~ Dimension, scales = "free_x") +
+ 
+  stat_cor(
+    aes(label = paste(after_stat(r.label), after_stat(p.label), sep = "~`,`~")),
+    method = "spearman", 
+    label.x.npc = 0.05, 
+    label.y.npc = 0.95,
+    digits = 3,
+    size = 3.2,
+    p.accuracy = 0.001
+  ) +
+  labs(
+    title = "Item-level Mean Rating Correlation (Spearman)",
+    x = "Control Group Mean Rating",
+    y = "ASD Group Mean Rating"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16, margin = margin(b = 15)),
+    strip.background = element_rect(fill = "grey95"),
+    strip.text = element_text(face = "bold", size = 10),
+    axis.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    aspect.ratio = 1 
   )
 ```
 

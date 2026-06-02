@@ -58,6 +58,22 @@ sns.boxplot(x="Category", y="Luminance", data=df_luminance)
 sns.stripplot(x="Category", y="Luminance", data=df_luminance, color="black", size=3, alpha=0.5)
 plt.title("Perceived luminance by Category")
 plt.xticks(rotation=45)
+# Save as PDF vector format for journals
+plt.savefig(
+    "Figure7b.pdf",
+    dpi=600,
+    format="pdf",
+    bbox_inches="tight",
+)
+
+# Save as EPS vector format for journals
+plt.savefig(
+    "Figure7b.eps",
+    dpi=600,
+    format="eps",
+    bbox_inches="tight",
+)
+
 plt.show()
 
 

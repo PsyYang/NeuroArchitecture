@@ -9,7 +9,6 @@ library(tidyverse)
 library(readxl)
 
 # --- 1. Data Import ---
-# Note: Ensure Data_exp2.xlsx is in the same working directory
 raw_df <- read_excel("Data_exp2.xlsx")
 
 # --- 2. Data Cleaning and Preprocessing ---
@@ -22,7 +21,7 @@ df <- raw_df %>%
   mutate(Participant = as.numeric(as.character(Participant))) %>%
   
   # Assign Group based on Participant ID (ASD: 1-23, Control: 24+)
-  mutate(Group = if_else(Participant <= 23, "ASD", "Control")) %>%
+  mutate(Group = if_else(Participant <= 23, "ASD", "Neurotypical")) %>%
   
   # Convert grouping variables to factors for statistical modeling (LMM/t-test)
   mutate(across(c(Category, Group), as.factor)) %>%

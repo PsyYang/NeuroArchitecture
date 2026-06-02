@@ -306,10 +306,7 @@ eff_size_results <- eff_size(emm_results, sigma = sigma(best_model), edf = df.re
 print(eff_size_results)
 ```
 # Combined plots
-Raw rating not estimated marginal means.
 ```{r}
-library(tidyverse)
-
 # --- 1. Aggregate Trial data to Subject-level Means ---
 # We calculate the mean for the global score and each individual dimension
 subject_means <- df %>%
@@ -336,7 +333,7 @@ mean_ratings_long <- subject_means %>%
   ) %>%
   mutate(Dimension = factor(Dimension, 
                             levels = raw_cols, 
-                            labels = c("Global Mean", "Hominess", "Naturalness", 
+                            labels = c("Mean Ratings", "Hominess", "Naturalness", 
                                        "Personalness", "Beauty", "Approachability")))
 
 # --- 3. Create the Combined Plot (2x3 Grid) ---
@@ -350,11 +347,11 @@ combined_mean_plot <- ggplot(mean_ratings_long, aes(x = Category, y = Avg_Rating
   # Use free_y to let each dimension show its own range clearly
   facet_wrap(~Dimension, nrow = 2, ncol = 3, scales = "free_y") +
   # Scientific color palette
-  scale_fill_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
-  scale_color_manual(values = c("ASD" = "#E64B35FF", "Control" = "#4DBBD5FF")) +
+  scale_fill_manual(values = c("ASD" = "#E64B35FF", "Neurotypical" = "#4DBBD5FF")) +
+  scale_color_manual(values = c("ASD" = "#E64B35FF", "Neurotypical" = "#4DBBD5FF")) +
   labs(
-    y = "Average Rating (1-7)",
-    x = "Stimulus Category",
+    y = "Average Rating",
+    x = "Category",
     title = "Subject-level Mean Ratings Across Dimensions"
   ) +
   theme_bw() +
@@ -368,5 +365,29 @@ combined_mean_plot <- ggplot(mean_ratings_long, aes(x = Category, y = Avg_Rating
 
 # --- 4. Print Plot ---
 print(combined_mean_plot)
+```
+```{r}
+# Save as PDF vector format
+ggsave(
+  filename = "Figure5.pdf",
+  plot = combined_mean_plot,
+  device = "pdf",
+  dpi = 600,
+  width = 10,       # Width in inches (adjust according to your layout needs)
+  height = 7,        # Height in inches (adjust according to your layout needs)
+  units = "in"
+)
+
+# Save as EPS vector format
+ggsave(
+  filename = "Figure5.eps",
+  plot = combined_mean_plot,
+  device = "eps",
+  dpi = 600,
+  width = 10,       # Width in inches
+  height = 7,        # Height in inches
+  units = "in"
+)
+
 ```
 

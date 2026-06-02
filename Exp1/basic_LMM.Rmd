@@ -114,7 +114,7 @@ Taken together, the results indicate a robust effect of Category, with Combined+
 ```{r echo=FALSE}
 emm_df <- as.data.frame(emm_cat)
 
-ggplot(emm_df,
+predict_plot <- ggplot(emm_df,
        aes(x = factor(Category, levels = order),
            y = emmean,
            fill = Category)) +
@@ -132,6 +132,30 @@ ggplot(emm_df,
     legend.position = "none",
     plot.title = element_text(face = "bold", hjust = 0.5)
   )
+print(predict_plot)
 
+```
+```{r}
+# Save as PDF vector format
+ggsave(
+  filename = "Figure4.pdf",
+  plot = predict_plot,
+  device = "pdf",
+  dpi = 600,
+  width = 10,       # Width in inches (adjust according to your layout needs)
+  height = 7,        # Height in inches (adjust according to your layout needs)
+  units = "in"
+)
+
+# Save as EPS vector format
+ggsave(
+  filename = "Figure4.eps",
+  plot = predict_plot,
+  device = "eps",
+  dpi = 600,
+  width = 10,       # Width in inches
+  height = 7,        # Height in inches
+  units = "in"
+)
 ```
 
